@@ -6,15 +6,48 @@
 
 <?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:l="/lib/layout"
-         xmlns:f="/lib/form" xmlns:p="/lib/profile">
-  <p:profile name="action">
+         xmlns:f="/lib/form">
   <l:layout title="${it.displayName}" norefresh="true" permission="${it.EXTENDED_READ}">
     <st:include page="sidepanel.jelly" it="${app}"/>
     <l:main-panel>
       <j:set var="snapshot" value="${it.snapshot}"/>
       <h1>Profiling results</h1>
-      ${snapshot}
+      <table class="sortable pane bigtable">
+        <thead>
+          <tr>
+            <th>${%Name}</th>
+            <th>${%Sample size}</th>
+            <th>${%Average wall time}</th>
+            <th>${%Average own time}</th>
+            <th>${%Average child time}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <j:forEach items="${snapshot}" var="item">
+            <j:if test="${item.count &gt; 2}">
+              <tr>
+                <td>${item.name}</td>
+                <td data="${item.count}">${item.count}</td>
+                <td data="${item.avgTotalTimeR}">${item.avgTotalTimeR}±${item.avgTotalTimeStdDevR}</td>
+                <td data="${item.avgOwnTimeR}">${item.avgOwnTimeR}±${item.avgOwnTimeStdDevR}</td>
+                <td data="${item.avgChildTimeR}">${item.avgChildTimeR}±${item.avgChildTimeStdDevR}</td>
+              </tr>
+            </j:if>
+            <j:if test="${item.count &lt;= 2}">
+              <tr>
+                <td>${item.name}</td>
+                <td data="${item.count}">${item.count}</td>
+                <td data="${item.avgTotalTimeR}">${item.avgTotalTimeR}</td>
+                <td data="${item.avgOwnTimeR}">${item.avgOwnTimeR}</td>
+                <td data="${item.avgChildTimeR}">${item.avgChildTimeR}</td>
+              </tr>
+            </j:if>
+          </j:forEach>
+        </tbody>
+      </table>
+      <f:form action="reset" method="POST" name="reset">
+        <f:submit value="${%Reset}"/>
+      </f:form>
     </l:main-panel>
   </l:layout>
-  </p:profile>
 </j:jelly>

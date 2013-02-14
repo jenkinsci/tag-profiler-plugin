@@ -1,29 +1,61 @@
+/*
+ * The MIT License
+ *
+ * Copyright (c) 2013, CloudBees, Inc., Stephen Connolly.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
 package org.jenkinsci.plugins.tagprofiler;
 
 import hudson.Extension;
 import hudson.model.Describable;
 import hudson.model.Descriptor;
 import hudson.model.RootAction;
+import hudson.util.PluginServletFilter;
 import jenkins.model.Jenkins;
+import org.kohsuke.stapler.HttpResponse;
+import org.kohsuke.stapler.HttpResponses;
+import org.kohsuke.stapler.StaplerProxy;
+import org.kohsuke.stapler.StaplerRequest;
 
+import javax.servlet.Filter;
+import javax.servlet.FilterChain;
+import javax.servlet.FilterConfig;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.SortedMap;
-import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * @author stephenc
- * @since 14/02/2013 11:51
+ * A profiler for profiling Jenkins requests.
  */
-@Extension
-public final class ProfileStats implements RootAction {
+@Extension(ordinal = Double.MAX_VALUE)
+public final class ProfileStats extends Descriptor<ProfileStats> implements Describable<ProfileStats> {
 
     private final ConcurrentMap<String, Stats> runningStats = new ConcurrentHashMap<String, Stats>();
 
@@ -32,18 +64,21 @@ public final class ProfileStats implements RootAction {
     private static final Logger LOGGER = Logger.getLogger(ProfileStats.class.getName());
 
     public ProfileStats() {
-    }
-
-    public String getIconFileName() {
-        return "/plugin/tag-profiler/images/24x24/clock.png";
+        super(ProfileStats.class);
+        try {
+            PluginServletFilter.addFilter(new FilterImpl());
+        } catch (ServletException e) {
+            LOGGER.log(Level.WARNING, "Could not install request profiling", e);
+        }
     }
 
     public String getDisplayName() {
         return "Tag Profiler";
     }
 
-    public String getUrlName() {
-        return "tag-profiler";
+    public HttpResponse doReset(StaplerRequest req) {
+        reset();
+        return HttpResponses.redirectToDot();
     }
 
     public static void reset() {
@@ -52,7 +87,7 @@ public final class ProfileStats implements RootAction {
 
     public List<Snapshot> getSnapshot() {
         List<Snapshot> result = new ArrayList<Snapshot>(runningStats.size());
-        for (Stats s: runningStats.values()) {
+        for (Stats s : runningStats.values()) {
             result.add(s.snapshot());
         }
         Collections.sort(result, new Comparator<Snapshot>() {
@@ -81,45 +116,17 @@ public final class ProfileStats implements RootAction {
             stats.record(durationNanos, m.childTime);
             if (m.parent != null) {
                 m.parent.childTime += durationNanos;
-            } else {
-                final String name = m.name;
-                new Thread() {
-                    @Override
-                    public void run() {
-                        SortedMap<String, Stats> tree = new TreeMap<String, Stats>();
-                        for (Map.Entry<String, Stats> entry : singleton.runningStats.entrySet()) {
-                            if (entry.getKey().startsWith(name)) {
-                                tree.put(entry.getKey(), entry.getValue());
-                            }
-                        }
-                        for (Stats s : tree.values()) {
-                            Snapshot snapshot = s.snapshot();
-                            if (LOGGER.isLoggable(Level.INFO)) {
-                                LOGGER.log(Level.INFO,
-                                        "Profiler[{0}]\n    n: {1}\n    Total time: {2}±{3}s\n    Own time: "
-                                                + "{4}±{5}s\n    Child time:"
-                                                + " {6}±{7}s",
-                                        new Object[]{
-                                                snapshot.getName(),
-                                                snapshot.getCount(),
-                                                snapshot.getAvgTotalTime(),
-                                                snapshot.getAvgTotalTimeStdDev(),
-                                                snapshot.getAvgOwnTime(),
-                                                snapshot.getAvgOwnTimeStdDev(),
-                                                snapshot.getAvgChildTime(),
-                                                snapshot.getAvgChildTimeStdDev()
-                                        });
-                            }
-                        }
-                    }
-                }.start();
             }
             measurement.set(m.parent);
         }
     }
 
     private static ProfileStats getInstance() {
-        return Jenkins.getInstance().getExtensionList(RootAction.class).get(ProfileStats.class);
+        return (ProfileStats) Jenkins.getInstance().getDescriptorOrDie(ProfileStats.class);
+    }
+
+    public ProfileStats getDescriptor() {
+        return (ProfileStats) Jenkins.getInstance().getDescriptorOrDie(ProfileStats.class);
     }
 
     public static final class Snapshot {
@@ -176,6 +183,30 @@ public final class ProfileStats implements RootAction {
         public double getAvgChildTime() {
             return avgChildTime;
         }
+
+        public double getAvgTotalTimeStdDevR() {
+            return Math.round(avgTotalTimeStdDev * 1000.0) / 1000.0;
+        }
+
+        public double getAvgTotalTimeR() {
+            return Math.round(avgTotalTime * 1000.0) / 1000.0;
+        }
+
+        public double getAvgOwnTimeStdDevR() {
+            return Math.round(avgOwnTimeStdDev * 1000.0) / 1000.0;
+        }
+
+        public double getAvgOwnTimeR() {
+            return Math.round(avgOwnTime * 1000.0) / 1000.0;
+        }
+
+        public double getAvgChildTimeStdDevR() {
+            return Math.round(avgChildTimeStdDev * 1000.0) / 1000.0;
+        }
+
+        public double getAvgChildTimeR() {
+            return Math.round(avgChildTime * 1000.0) / 1000.0;
+        }
     }
 
     private static final class Stats {
@@ -231,6 +262,54 @@ public final class ProfileStats implements RootAction {
             this.name = parent == null ? name : parent.name + "/" + name;
             startTime = System.nanoTime();
             childTime = 0;
+        }
+    }
+
+    @Extension
+    public static class RootActionImpl implements StaplerProxy, RootAction {
+
+        public ProfileStats getTarget() {
+            return (ProfileStats) Jenkins.getInstance().getDescriptorOrDie(ProfileStats.class);
+        }
+
+        public String getDisplayName() {
+            return getTarget().getDisplayName();
+        }
+
+        public String getIconFileName() {
+            return "/plugin/tag-profiler/images/24x24/clock.png";
+        }
+
+        public String getUrlName() {
+            return "tag-profiler";
+        }
+
+    }
+
+    @Extension
+    public static class FilterImpl implements Filter {
+
+        public void init(FilterConfig filterConfig) throws ServletException {
+        }
+
+        public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+                throws IOException, ServletException {
+            final HttpServletRequest req = (HttpServletRequest) request;
+            final String requestURI = req.getRequestURI();
+            final boolean check = !requestURI.startsWith("/static");
+            if (check) {
+                enter(requestURI);
+            }
+            try {
+                chain.doFilter(request, response);
+            } finally {
+                if (check) {
+                    leave();
+                }
+            }
+        }
+
+        public void destroy() {
         }
     }
 }

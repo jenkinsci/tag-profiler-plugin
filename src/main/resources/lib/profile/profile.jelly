@@ -1,8 +1,8 @@
 <?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define">
-  <j:invokeStatic method="enter" className="org.jenkinsci.plugins.tagprofiler.ProfileStats">
+<j:jelly xmlns:j="jelly:core" xmlns:d="jelly:define">
+  <j:invoke method="enter" on="${app.getDescriptorByName('org.jenkinsci.plugins.tagprofiler.ProfileStats')}">
     <j:arg type="java.lang.String" value="${attrs.name}"/>
-  </j:invokeStatic>
+  </j:invoke>
   <d:invokeBody/>
-  <j:invokeStatic method="leave" className="org.jenkinsci.plugins.tagprofiler.ProfileStats"/>
+  <j:invoke method="leave" on="${app.getDescriptorByName('org.jenkinsci.plugins.tagprofiler.ProfileStats')}"/>
 </j:jelly>

@@ -29,6 +29,7 @@ import hudson.model.Descriptor;
 import hudson.model.RootAction;
 import hudson.util.PluginServletFilter;
 import jenkins.model.Jenkins;
+import net.sf.json.JSONObject;
 import org.kohsuke.stapler.HttpResponse;
 import org.kohsuke.stapler.HttpResponses;
 import org.kohsuke.stapler.StaplerProxy;
@@ -57,11 +58,15 @@ import java.util.logging.Logger;
 @Extension(ordinal = Double.MAX_VALUE)
 public final class ProfileStats extends Descriptor<ProfileStats> implements Describable<ProfileStats> {
 
-    private final ConcurrentMap<String, Stats> runningStats = new ConcurrentHashMap<String, Stats>();
+    private transient final ConcurrentMap<String, Stats> runningStats = new ConcurrentHashMap<String, Stats>();
 
     private static final ThreadLocal<Measurement> measurement = new ThreadLocal<Measurement>();
 
     private static final Logger LOGGER = Logger.getLogger(ProfileStats.class.getName());
+
+    private boolean disabled = false;
+
+    private boolean mergeRequests = false;
 
     public ProfileStats() {
         super(ProfileStats.class);
@@ -70,10 +75,27 @@ public final class ProfileStats extends Descriptor<ProfileStats> implements Desc
         } catch (ServletException e) {
             LOGGER.log(Level.WARNING, "Could not install request profiling", e);
         }
+        load();
+    }
+
+    @Override
+    public boolean configure(StaplerRequest req, JSONObject json) throws FormException {
+        disabled = json.optBoolean("disabled", false);
+        mergeRequests = json.optBoolean("mergeRequests", false);
+        save();
+        return true;
     }
 
     public String getDisplayName() {
         return "Tag Profiler";
+    }
+
+    public boolean isDisabled() {
+        return disabled;
+    }
+
+    public boolean isMergeRequests() {
+        return mergeRequests;
     }
 
     public HttpResponse doReset(StaplerRequest req) {
@@ -103,16 +125,24 @@ public final class ProfileStats extends Descriptor<ProfileStats> implements Desc
     }
 
     static void enter(String name, String sep) {
+        if (getInstance().disabled) {
+            measurement.set(null);
+            return;
+        }
         name = hudson.Util.fixEmptyAndTrim(name);
         measurement.set(new Measurement(measurement.get(), name == null ? "anonymous" : name, sep));
     }
 
     public static void leave() {
         long endTime = System.nanoTime();
+        final ProfileStats singleton = getInstance();
+        if (singleton.disabled) {
+            measurement.set(null);
+            return;
+        }
         Measurement m = measurement.get();
         if (m != null) {
             Stats stats;
-            final ProfileStats singleton = getInstance();
             while (null == (stats = singleton.runningStats.get(m.name))) {
                 singleton.runningStats.putIfAbsent(m.name, new Stats(m.name));
             }
@@ -291,19 +321,19 @@ public final class ProfileStats extends Descriptor<ProfileStats> implements Desc
     public static class RootActionImpl implements StaplerProxy, RootAction {
 
         public ProfileStats getTarget() {
-            return (ProfileStats) Jenkins.getInstance().getDescriptorOrDie(ProfileStats.class);
+            return getInstance();
         }
 
         public String getDisplayName() {
-            return getTarget().getDisplayName();
+            return getInstance().isDisabled() ? null : getInstance().getDisplayName();
         }
 
         public String getIconFileName() {
-            return "/plugin/tag-profiler/images/24x24/clock.png";
+            return getInstance().isDisabled() ? null : "/plugin/tag-profiler/images/24x24/clock.png";
         }
 
         public String getUrlName() {
-            return "tag-profiler";
+            return getInstance().isDisabled() ? null : "tag-profiler";
         }
 
     }
@@ -316,23 +346,28 @@ public final class ProfileStats extends Descriptor<ProfileStats> implements Desc
 
         public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
                 throws IOException, ServletException {
-            final HttpServletRequest req = (HttpServletRequest) request;
-            final String requestURI = req.getRequestURI();
-            final String name;
-            if (requestURI.startsWith("/static/")) {
-                name = "/static/*";
-            } else if (requestURI.startsWith("/adjuncts/")) {
-                name = "/adjuncts/*";
-            } else if (requestURI.startsWith("/resources/")) {
-                name = "/resources/*";
-            } else {
-                name = requestURI;
-            }
-            enter(name, " » ");
-            try {
+            ProfileStats instance = getInstance();
+            if (instance == null || instance.isDisabled() || instance.isMergeRequests()) {
                 chain.doFilter(request, response);
-            } finally {
-                leave();
+            } else {
+                final HttpServletRequest req = (HttpServletRequest) request;
+                final String requestURI = req.getRequestURI();
+                final String name;
+                if (requestURI.startsWith("/static/")) {
+                    name = "/static/*";
+                } else if (requestURI.startsWith("/adjuncts/")) {
+                    name = "/adjuncts/*";
+                } else if (requestURI.startsWith("/resources/")) {
+                    name = "/resources/*";
+                } else {
+                    name = requestURI;
+                }
+                enter(name, " » ");
+                try {
+                    chain.doFilter(request, response);
+                } finally {
+                    leave();
+                }
             }
         }
 

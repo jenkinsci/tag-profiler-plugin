@@ -1,5 +1,11 @@
 <?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:d="jelly:define">
+<j:jelly xmlns:j="jelly:core" xmlns:d="jelly:define" xmlns:s="jelly:stapler">
+  <s:documentation>
+    Profile the execution of the body.
+    <s:attribute name="name">
+      If specified the name of the profiler.
+    </s:attribute>
+  </s:documentation>
   <j:invoke method="enter" on="${app.getDescriptorByName('org.jenkinsci.plugins.tagprofiler.ProfileStats')}">
     <j:arg type="java.lang.String" value="${attrs.name}"/>
   </j:invoke>

@@ -33,7 +33,7 @@
   </parent>
 
   <artifactId>tag-profiler</artifactId>
-  <version>0.2-SNAPSHOT</version>
+  <version>0.2</version>
   <packaging>hpi</packaging>
 
   <name>Tag Profiler Plugin</name>
@@ -64,7 +64,7 @@
     <connection>scm:git:git://github.com/jenkinsci/tag-profiler-plugin.git</connection>
     <developerConnection>scm:git:git@github.com:jenkinsci/tag-profiler-plugin.git</developerConnection>
     <url>http://github.com/jenkinsci/tag-profiler-plugin</url>
-    <tag>HEAD</tag>
+    <tag>tag-profiler-0.2</tag>
   </scm>
 
   <properties>

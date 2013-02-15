@@ -7,7 +7,7 @@
 <?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:l="/lib/layout"
          xmlns:f="/lib/form">
-  <l:layout title="${it.displayName}" norefresh="true" permission="${it.EXTENDED_READ}">
+  <l:layout title="${it.displayName}" permission="${app.ADMINISTER}">
     <st:include page="sidepanel.jelly" it="${app}"/>
     <l:main-panel>
       <j:set var="snapshot" value="${it.snapshot}"/>
@@ -15,31 +15,31 @@
       <table class="sortable pane bigtable">
         <thead>
           <tr>
-            <th>${%Name}</th>
-            <th>${%Sample size}</th>
-            <th>${%Average wall time}</th>
-            <th>${%Average own time}</th>
-            <th>${%Average child time}</th>
+            <th align="left">${%Name}</th>
+            <th align="right">#</th>
+            <th align="right">${%Wall time}</th>
+            <th align="right">${%Own time}</th>
+            <th align="right">${%Child time}</th>
           </tr>
         </thead>
         <tbody>
           <j:forEach items="${snapshot}" var="item">
-            <j:if test="${item.count &gt; 2}">
+            <j:if test="${item.count &gt;= 2}">
               <tr>
                 <td>${item.name}</td>
-                <td data="${item.count}">${item.count}</td>
-                <td data="${item.avgTotalTimeR}">${item.avgTotalTimeR}±${item.avgTotalTimeStdDevR}</td>
-                <td data="${item.avgOwnTimeR}">${item.avgOwnTimeR}±${item.avgOwnTimeStdDevR}</td>
-                <td data="${item.avgChildTimeR}">${item.avgChildTimeR}±${item.avgChildTimeStdDevR}</td>
+                <td data="${item.count}" align="right">${item.count}</td>
+                <td data="${item.avgTotalTimeMS}" align="right">${item.avgTotalTimeMS}±${item.avgTotalTimeStdDevMS} ms</td>
+                <td data="${item.avgOwnTimeMS}" align="right">${item.avgOwnTimeMS}±${item.avgOwnTimeStdDevMS} ms</td>
+                <td data="${item.avgChildTimeMS}" align="right">${item.avgChildTimeMS}±${item.avgChildTimeStdDevMS} ms</td>
               </tr>
             </j:if>
-            <j:if test="${item.count &lt;= 2}">
+            <j:if test="${item.count &lt; 2}">
               <tr>
                 <td>${item.name}</td>
-                <td data="${item.count}">${item.count}</td>
-                <td data="${item.avgTotalTimeR}">${item.avgTotalTimeR}</td>
-                <td data="${item.avgOwnTimeR}">${item.avgOwnTimeR}</td>
-                <td data="${item.avgChildTimeR}">${item.avgChildTimeR}</td>
+                <td data="${item.count}" align="right">${item.count}</td>
+                <td data="${item.avgTotalTimeMS}" align="right">${item.avgTotalTimeMS} ms</td>
+                <td data="${item.avgOwnTimeMS}" align="right">${item.avgOwnTimeMS} ms</td>
+                <td data="${item.avgChildTimeMS}" align="right">${item.avgChildTimeMS} ms</td>
               </tr>
             </j:if>
           </j:forEach>

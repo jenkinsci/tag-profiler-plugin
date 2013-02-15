@@ -99,8 +99,12 @@ public final class ProfileStats extends Descriptor<ProfileStats> implements Desc
     }
 
     public static void enter(String name) {
+        enter(name, "/");
+    }
+
+    static void enter(String name, String sep) {
         name = hudson.Util.fixEmptyAndTrim(name);
-        measurement.set(new Measurement(measurement.get(), name == null ? "anonymous" : name));
+        measurement.set(new Measurement(measurement.get(), name == null ? "anonymous" : name, sep));
     }
 
     public static void leave() {
@@ -113,9 +117,11 @@ public final class ProfileStats extends Descriptor<ProfileStats> implements Desc
                 singleton.runningStats.putIfAbsent(m.name, new Stats(m.name));
             }
             long durationNanos = endTime - m.startTime;
-            stats.record(durationNanos, m.childTime);
-            if (m.parent != null) {
-                m.parent.childTime += durationNanos;
+            if (durationNanos > 0) {
+                stats.record(durationNanos, m.childTime);
+                if (m.parent != null) {
+                    m.parent.childTime += durationNanos;
+                }
             }
             measurement.set(m.parent);
         }
@@ -139,9 +145,8 @@ public final class ProfileStats extends Descriptor<ProfileStats> implements Desc
         private final double avgChildTime;
         private final double avgChildTimeStdDev;
 
-        private Snapshot(String name, int count, double avgTotalTimeStdDev, double avgTotalTime,
-                         double avgOwnTimeStdDev,
-                         double avgOwnTime, double avgChildTimeStdDev, double avgChildTime) {
+        private Snapshot(String name, int count, double avgTotalTime, double avgTotalTimeStdDev,
+                         double avgOwnTime, double avgOwnTimeStdDev, double avgChildTime, double avgChildTimeStdDev) {
             this.name = name;
             this.count = count;
             this.avgTotalTimeStdDev = avgTotalTimeStdDev;
@@ -184,40 +189,53 @@ public final class ProfileStats extends Descriptor<ProfileStats> implements Desc
             return avgChildTime;
         }
 
-        public double getAvgTotalTimeStdDevR() {
-            return Math.round(avgTotalTimeStdDev * 1000.0) / 1000.0;
+        public double getAvgTotalTimeStdDevMS() {
+            return Math.round(avgTotalTimeStdDev * 10000.0) / 10.0;
         }
 
-        public double getAvgTotalTimeR() {
-            return Math.round(avgTotalTime * 1000.0) / 1000.0;
+        public double getAvgTotalTimeMS() {
+            return Math.round(avgTotalTime * 10000.0) / 10.0;
         }
 
-        public double getAvgOwnTimeStdDevR() {
-            return Math.round(avgOwnTimeStdDev * 1000.0) / 1000.0;
+        public double getAvgOwnTimeStdDevMS() {
+            return Math.round(avgOwnTimeStdDev * 10000.0) / 10.0;
         }
 
-        public double getAvgOwnTimeR() {
-            return Math.round(avgOwnTime * 1000.0) / 1000.0;
+        public double getAvgOwnTimeMS() {
+            return Math.round(avgOwnTime * 10000.0) / 10.0;
         }
 
-        public double getAvgChildTimeStdDevR() {
-            return Math.round(avgChildTimeStdDev * 1000.0) / 1000.0;
+        public double getAvgChildTimeStdDevMS() {
+            return Math.round(avgChildTimeStdDev * 10000.0) / 10.0;
         }
 
-        public double getAvgChildTimeR() {
-            return Math.round(avgChildTime * 1000.0) / 1000.0;
+        public double getAvgChildTimeMS() {
+            return Math.round(avgChildTime * 10000.0) / 10.0;
+        }
+
+        @Override
+        public String toString() {
+            final StringBuilder sb = new StringBuilder();
+            sb.append("Snapshot");
+            sb.append("{name='").append(name).append('\'');
+            sb.append(", count=").append(count);
+            sb.append(", avgTotalTime=").append(avgTotalTime);
+            sb.append(", avgOwnTime=").append(avgOwnTime);
+            sb.append(", avgChildTime=").append(avgChildTime);
+            sb.append('}');
+            return sb.toString();
         }
     }
 
     private static final class Stats {
         private final String name;
-        private int count;
-        private double totalSum;
-        private double totalSum2;
-        private double ownSum;
-        private double ownSum2;
-        private double childSum;
-        private double childSum2;
+        private int count = 0;
+        private double totalSum = 0.0;
+        private double totalSum2 = 0.0;
+        private double ownSum = 0.0;
+        private double ownSum2 = 0.0;
+        private double childSum = 0.0;
+        private double childSum2 = 0.0;
 
         public Stats(String name) {
             this.name = name;
@@ -237,13 +255,15 @@ public final class ProfileStats extends Descriptor<ProfileStats> implements Desc
         }
 
         public synchronized Snapshot snapshot() {
-            return new Snapshot(name, count, totalSum / count,
-                    stddev(totalSum, totalSum2),
-                    ownSum / count,
-                    stddev(ownSum, ownSum2),
-                    childSum / count,
-                    stddev(childSum, childSum2)
-            );
+            return count == 0
+                    ? new Snapshot(name, count, 0, Double.NaN, 0, Double.NaN, 0, Double.NaN)
+                    : new Snapshot(name, count, totalSum / count,
+                            stddev(totalSum, totalSum2),
+                            ownSum / count,
+                            stddev(ownSum, ownSum2),
+                            childSum / count,
+                            stddev(childSum, childSum2)
+                    );
         }
 
         private double stddev(double sum, double sum2) {
@@ -254,12 +274,14 @@ public final class ProfileStats extends Descriptor<ProfileStats> implements Desc
     private static final class Measurement {
         private final Measurement parent;
         private final String name;
+        private final String sep;
         private final long startTime;
         private long childTime;
 
-        private Measurement(Measurement parent, String name) {
+        private Measurement(Measurement parent, String name, String sep) {
             this.parent = parent;
-            this.name = parent == null ? name : parent.name + "/" + name;
+            this.sep = sep == null ? "/" : sep;
+            this.name = parent == null ? name : parent.name + parent.sep + name;
             startTime = System.nanoTime();
             childTime = 0;
         }
@@ -296,16 +318,21 @@ public final class ProfileStats extends Descriptor<ProfileStats> implements Desc
                 throws IOException, ServletException {
             final HttpServletRequest req = (HttpServletRequest) request;
             final String requestURI = req.getRequestURI();
-            final boolean check = !requestURI.startsWith("/static");
-            if (check) {
-                enter(requestURI);
+            final String name;
+            if (requestURI.startsWith("/static/")) {
+                name = "/static/*";
+            } else if (requestURI.startsWith("/adjuncts/")) {
+                name = "/adjuncts/*";
+            } else if (requestURI.startsWith("/resources/")) {
+                name = "/resources/*";
+            } else {
+                name = requestURI;
             }
+            enter(name, " » ");
             try {
                 chain.doFilter(request, response);
             } finally {
-                if (check) {
-                    leave();
-                }
+                leave();
             }
         }
 

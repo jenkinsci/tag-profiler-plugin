@@ -158,11 +158,11 @@ public final class ProfileStats extends Descriptor<ProfileStats> implements Desc
     }
 
     private static ProfileStats getInstance() {
-        return (ProfileStats) Jenkins.getInstance().getDescriptorOrDie(ProfileStats.class);
+        return (ProfileStats) Jenkins.getActiveInstance().getDescriptorOrDie(ProfileStats.class);
     }
 
     public ProfileStats getDescriptor() {
-        return (ProfileStats) Jenkins.getInstance().getDescriptorOrDie(ProfileStats.class);
+        return (ProfileStats) Jenkins.getActiveInstance().getDescriptorOrDie(ProfileStats.class);
     }
 
     public static final class Snapshot {

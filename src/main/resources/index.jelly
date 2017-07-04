@@ -1,0 +1,5 @@
+<?jelly escape-by-default='true'?>
+<div>
+  This plugin allows you to define regions of Jelly to profile.
+</div>
+
